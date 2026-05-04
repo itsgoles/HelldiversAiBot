@@ -29,7 +29,8 @@ import {
   Hammer,
   HelpCircle,
   Menu,
-  X
+  X,
+  Check
 } from 'lucide-react';
 import { SHORT_QUESTIONS, EXTENDED_QUESTIONS, ARCHETYPES, STRATEGIES, Build } from './constants';
 import { analyzePlayer, ProfileInput, PlayerStats, AnalysisResult } from './lib/analyst';
@@ -55,6 +56,7 @@ export default function App() {
   const [analysis, setAnalysis] = useState<AnalysisResult | null>(null);
   const [warData, setWarData] = useState<WarStatus | null>(null);
   const [isLoadingWar, setIsLoadingWar] = useState(false);
+  const [lastSelectedAnswer, setLastSelectedAnswer] = useState<string | null>(null);
 
   const activeQuestions = quizType === 'extended' ? EXTENDED_QUESTIONS : SHORT_QUESTIONS;
 
@@ -67,14 +69,29 @@ export default function App() {
   }, []);
 
   const handleQuizAnswer = (value: string) => {
-    const questionId = activeQuestions[currentQuestionIndex].id;
-    const newAnswers = { ...quizAnswers, [questionId]: value };
-    setQuizAnswers(newAnswers);
+    setLastSelectedAnswer(value);
+    
+    // Immediate feedback delay before moving to next
+    setTimeout(() => {
+      const questionId = activeQuestions[currentQuestionIndex].id;
+      const newAnswers = { ...quizAnswers, [questionId]: value };
+      setQuizAnswers(newAnswers);
+      setLastSelectedAnswer(null);
 
-    if (currentQuestionIndex < activeQuestions.length - 1) {
-      setCurrentQuestionIndex(currentQuestionIndex + 1);
+      if (currentQuestionIndex < activeQuestions.length - 1) {
+        setCurrentQuestionIndex(currentQuestionIndex + 1);
+      } else {
+        setStep('stats_prompt');
+      }
+    }, 400);
+  };
+
+  const handleGoBack = () => {
+    if (currentQuestionIndex > 0) {
+      setCurrentQuestionIndex(currentQuestionIndex - 1);
     } else {
-      setStep('stats_prompt');
+      setStep('intro');
+      setQuizType(null);
     }
   };
 
@@ -181,12 +198,20 @@ export default function App() {
             >
               <div className="flex justify-between items-center mb-8">
                 <div className="flex flex-col">
-                  <span className="font-mono text-superearth-yellow text-xs uppercase opacity-60">{quizType === 'extended' ? 'Valutazione Biometrica' : 'Ricalibrazione Tattica'}</span>
+                  <div className="flex items-center gap-4 mb-1">
+                    <button 
+                      onClick={handleGoBack}
+                      className="text-superearth-yellow hover:text-white transition-colors flex items-center gap-1 text-[10px] font-mono group"
+                    >
+                      <ArrowRight className="w-3 h-3 rotate-180 group-hover:-translate-x-1 transition-transform" /> [INDIETRO]
+                    </button>
+                    <span className="font-mono text-superearth-yellow text-[10px] uppercase opacity-40 tracking-widest">{quizType === 'extended' ? 'Valutazione Biometrica' : 'Ricalibrazione Tattica'}</span>
+                  </div>
                   <span className="font-mono text-superearth-yellow font-bold">QUESTITO {currentQuestionIndex + 1}/{activeQuestions.length}</span>
                 </div>
                 <div className="h-2 w-48 bg-superearth-grey border border-superearth-yellow/30">
                   <div 
-                    className="h-full bg-superearth-yellow transition-all duration-300" 
+                    className="h-full bg-superearth-yellow transition-all duration-300 shadow-[0_0_10px_rgba(255,225,0,0.4)]" 
                     style={{ width: `${((currentQuestionIndex + 1) / activeQuestions.length) * 100}%` }}
                   />
                 </div>
@@ -200,11 +225,37 @@ export default function App() {
                 {activeQuestions[currentQuestionIndex].options.map((opt) => (
                   <button
                     key={opt.value}
+                    disabled={lastSelectedAnswer !== null}
                     onClick={() => handleQuizAnswer(opt.value)}
-                    className="text-left p-5 border border-superearth-yellow/20 bg-superearth-dark hover:bg-superearth-yellow hover:text-black transition-colors group flex items-center justify-between"
+                    className={cn(
+                      "text-left p-6 border transition-all group flex items-center justify-between relative overflow-hidden",
+                      lastSelectedAnswer === opt.value
+                        ? "bg-superearth-yellow text-black border-white"
+                        : quizAnswers[activeQuestions[currentQuestionIndex].id] === opt.value
+                          ? "bg-superearth-yellow/20 border-superearth-yellow text-superearth-yellow"
+                          : "border-superearth-yellow/20 bg-superearth-dark hover:bg-superearth-yellow hover:text-black"
+                    )}
                   >
-                    <span className="text-lg font-medium">{opt.label}</span>
-                    <ArrowRight className="opacity-0 group-hover:opacity-100 transition-opacity" />
+                    <span className="text-lg font-bold uppercase italic relative z-10">{opt.label}</span>
+                    <div className="flex items-center gap-3 relative z-10">
+                      {lastSelectedAnswer === opt.value && (
+                        <motion.div initial={{ scale: 0 }} animate={{ scale: 1 }}>
+                          <Check className="w-6 h-6" />
+                        </motion.div>
+                      )}
+                      <ArrowRight className={cn(
+                        "transition-all",
+                        lastSelectedAnswer === opt.value ? "opacity-0" : "opacity-0 group-hover:opacity-100 group-hover:translate-x-1"
+                      )} />
+                    </div>
+                    {lastSelectedAnswer === opt.value && (
+                      <motion.div 
+                        initial={{ left: '-100%' }}
+                        animate={{ left: '100%' }}
+                        transition={{ duration: 0.4 }}
+                        className="absolute inset-0 bg-white/20 skew-x-12"
+                      />
+                    )}
                   </button>
                 ))}
               </div>
@@ -409,8 +460,16 @@ export default function App() {
                     exit={{ opacity: 0, y: -10 }}
                     className="space-y-8"
                   >
-                    <div className="terminal-border p-8 bg-superearth-grey/50">
-                      <div className="flex flex-col md:flex-row md:items-center justify-between gap-6 mb-8">
+                    <motion.div 
+                      whileHover={{ scale: 1.01, boxShadow: "0 0 40px rgba(255,225,0,0.05)" }}
+                      className="terminal-border p-8 bg-superearth-grey/50 relative overflow-hidden group"
+                    >
+                      <div className="absolute top-0 right-0 p-4 opacity-5 group-hover:opacity-20 transition-opacity">
+                         {IconMap[ARCHETYPES.find(a => a.id === analysis.archetypeId)?.icon || 'Ghost'] && (
+                            React.createElement(IconMap[ARCHETYPES.find(a => a.id === analysis.archetypeId)?.icon || 'Ghost'], { className: "w-32 h-32" })
+                          )}
+                      </div>
+                      <div className="flex flex-col md:flex-row md:items-center justify-between gap-6 mb-8 relative z-10">
                         <div>
                           <h4 className="text-superearth-yellow font-mono text-sm tracking-widest uppercase mb-1">Archetipo Bellico</h4>
                           <h3 className="text-4xl md:text-6xl font-black italic uppercase leading-none">{analysis.archetype}</h3>
@@ -422,9 +481,11 @@ export default function App() {
                         </div>
                       </div>
                       
-                      <p className="text-2xl mb-8 italic border-l-4 border-superearth-yellow pl-6 py-4 bg-superearth-yellow/5">
-                        "{analysis.summary}"
-                      </p>
+                      <div className="relative z-10">
+                        <p className="text-2xl mb-8 italic border-l-4 border-superearth-yellow pl-6 py-4 bg-superearth-yellow/5">
+                          "{analysis.summary}"
+                        </p>
+                      </div>
 
                       {analysis.isExtended && analysis.categoryAnalyses && (
                         <div className="mb-12 grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
@@ -475,7 +536,7 @@ export default function App() {
                           </div>
                         </div>
                       </div>
-                    </div>
+                    </motion.div>
 
                     <div className="terminal-border p-8 bg-superearth-yellow text-black shadow-[0_20px_50px_rgba(255,225,0,0.2)]">
                       <h3 className="text-2xl font-black uppercase italic mb-8 border-b-2 border-black/10 pb-4">Direttiva Militare: Prossime 10 Operazioni</h3>
@@ -629,10 +690,26 @@ export default function App() {
                         </div>
                       </div>
                     ) : (
-                      <div className="p-12 text-center border-2 border-dashed border-superearth-yellow/20 bg-superearth-grey/20">
-                         <RefreshCw className="w-12 h-12 text-superearth-yellow opacity-20 mx-auto mb-4 animate-spin" />
-                         <p className="font-mono text-superearth-yellow/60 uppercase tracking-widest text-sm">Sincronizzazione satellitare in corso...</p>
-                         <p className="text-xs opacity-40 mt-2 italic">Si prega di restare in attesa della trasmissione autorizzata dal Ministero della Verità.</p>
+                      <div className="p-20 text-center border-2 border-dashed border-superearth-yellow/10 bg-superearth-grey/10 flex flex-col items-center justify-center gap-6">
+                         <div className="font-mono text-superearth-yellow/40 text-[10px] w-full max-w-md bg-black/40 p-4 border border-superearth-yellow/5 h-40 overflow-hidden relative">
+                            <motion.div
+                              animate={{ y: [0, -200] }}
+                              transition={{ duration: 5, repeat: Infinity, ease: "linear" }}
+                              className="space-y-1"
+                            >
+                              {Array.from({ length: 20 }).map((_, i) => (
+                                <p key={i} className="truncate" id={`log-item-${i}`}>
+                                  {`[LOG_${i}] FETCHING_SECTOR_${Math.floor(Math.random()*100)}... OK`}
+                                  {` > DATA: ${Math.random().toString(36).substring(7).toUpperCase()}`}
+                                </p>
+                              ))}
+                            </motion.div>
+                            <div className="absolute inset-0 bg-gradient-to-b from-transparent via-transparent to-superearth-dark" />
+                         </div>
+                         <div className="space-y-2">
+                           <p className="font-black text-superearth-yellow uppercase tracking-[0.3em] text-sm animate-pulse">Sincronizzazione Uplink Satellitare...</p>
+                           <p className="text-[10px] font-mono opacity-40 italic">Autorizzazione Ministero della Verità richiesta...</p>
+                         </div>
                       </div>
                     )}
                   </motion.div>
@@ -692,9 +769,13 @@ export default function App() {
 
               <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-6">
                  {ARCHETYPES.map((arch) => (
-                   <div key={arch.id} className="terminal-border p-6 bg-superearth-grey/50 flex flex-col hover:border-superearth-yellow transition-all group">
+                   <motion.div 
+                    key={arch.id} 
+                    whileHover={{ scale: 1.03, y: -8, boxShadow: "0 20px 40px rgba(0,0,0,0.4)" }}
+                    className="terminal-border p-6 bg-superearth-grey/50 flex flex-col hover:border-superearth-yellow transition-all group cursor-default"
+                   >
                       <div className="flex items-center gap-4 mb-6">
-                         <div className="bg-superearth-yellow p-3 text-black group-hover:scale-110 transition-transform">
+                         <div className="bg-superearth-yellow p-3 text-black group-hover:shadow-[0_0_15px_rgba(255,225,0,0.8)] transition-all">
                             {IconMap[arch.icon] && React.createElement(IconMap[arch.icon], { className: "w-8 h-8" })}
                          </div>
                          <h4 className="font-black text-xl italic uppercase leading-none">{arch.name}</h4>
@@ -719,7 +800,7 @@ export default function App() {
                           </div>
                         </div>
                       </div>
-                   </div>
+                   </motion.div>
                  ))}
               </div>
 
