@@ -60,49 +60,77 @@ export async function fetchWarStatus(): Promise<WarStatus | null> {
     }
     
     const data = await response.json();
-    if (!data || (Object.keys(data.war || {}).length === 0 && !data.campaigns)) {
+    console.log("[WAR_SERVICE] Raw Data Received:", JSON.stringify(data).substring(0, 500) + "...");
+    
+    if (!data || (!data.campaigns && !data.assignments)) {
       throw new Error("DATI_VUOTI_DALLA_RETE");
     }
 
-    const { assignments, campaigns } = data;
+    const { assignments, campaigns, war } = data;
     
-    let progress = 0;
-    const firstAssignment = assignments?.[0];
+    // Robust Major Order Mapping
+    const firstAssignment = assignments?.[0] || war?.majorOrder;
+    let majorOrder: WarStatus['majorOrder'] = undefined;
+
     if (firstAssignment) {
-      const task = firstAssignment.tasks?.[0] || firstAssignment.setting?.tasks?.[0];
-      const current = firstAssignment.progress?.[0] || 0;
-      const target = task?.values?.[0] || task?.value || task?.amount || 1;
-      progress = Math.min(100, (current / target) * 100);
-      
-      if (current > 0 && current <= 1 && target === 1) {
-        progress = current * 100;
+      let progress = 0;
+      // Handle various progress formats (array of floats, direct number, or tasks)
+      if (Array.isArray(firstAssignment.progress)) {
+        const val = firstAssignment.progress[0];
+        progress = val <= 1 ? val * 100 : val;
+      } else if (typeof firstAssignment.progress === 'number') {
+        progress = firstAssignment.progress <= 1 ? firstAssignment.progress * 100 : firstAssignment.progress;
+      } else {
+        // Fallback to task calculation
+        const task = firstAssignment.tasks?.[0] || firstAssignment.setting?.tasks?.[0];
+        const current = firstAssignment.progress?.[0] || 0;
+        const target = task?.values?.[0] || task?.value || task?.amount || 1;
+        progress = Math.min(100, (current / target) * 100);
       }
+
+      majorOrder = {
+        title: firstAssignment.title || firstAssignment.setting?.overrideTitle || "ORDINE MAGGIORE",
+        description: firstAssignment.briefing || firstAssignment.setting?.overrideBriefing || firstAssignment.description || "Libera la galassia!",
+        progress: Math.min(100, Math.max(0, progress)),
+        expiresAt: firstAssignment.expiresAt || new Date(Date.now() + 86400000).toISOString()
+      };
     }
 
-    const majorOrder = firstAssignment ? {
-      title: firstAssignment.title || firstAssignment.setting?.overrideTitle || "ORDINE MAGGIORE",
-      description: firstAssignment.briefing || firstAssignment.setting?.overrideBriefing || "Libera la galassia!",
-      progress: progress,
-      expiresAt: firstAssignment.expiresAt || new Date().toISOString()
-    } : undefined;
+    // Robust Planet Mapping
+    const activePlanets = (campaigns || [])
+      .map((c: any) => {
+        // Attempt to find the planet object in various common structures
+        const p = c.planet || c;
+        const s = c.planetStatus || p; // Some APIs use a status sub-object
+        
+        // Extract basic info with fallbacks
+        const name = p.name || p.planetName || "Pianeta Ignoto";
+        const sector = p.sector || p.planetSector || "Settore Sconosciuto";
+        const owner = p.owner || p.currentOwner || "Humans";
+        const players = p.statistics?.playerCount || p.players || c.players || 0;
+        
+        // Better liberation logic: direct field or calculate from health
+        let liberation = 0;
+        if (typeof p.liberation === 'number') {
+          liberation = p.liberation;
+        } else if (typeof s.health === 'number' && typeof s.maxHealth === 'number' && s.maxHealth > 0) {
+          liberation = 100 - ((s.health / s.maxHealth) * 100);
+        } else if (typeof p.health === 'number' && typeof p.maxHealth === 'number' && p.maxHealth > 0) {
+          liberation = 100 - ((p.health / p.maxHealth) * 100);
+        }
 
-    const activePlanets = (campaigns || []).slice(0, 10).map((c: any) => {
-      const planet = c.planet || c;
-      const status = c.planetStatus || planet;
-      const health = status?.health || planet?.health || 0;
-      const maxHealth = status?.maxHealth || planet?.maxHealth || 1000;
-      const liberation = 100 - ((health / maxHealth) * 100);
-
-      return {
-        name: planet?.name || "Pianeta Ignoto",
-        sector: planet?.sector || "Settore Sconosciuto",
-        liberation: Math.max(0, Math.min(100, liberation)),
-        owner: planet?.owner || "Humans",
-        health,
-        maxHealth,
-        players: (planet?.statistics?.playerCount || c.statistics?.playerCount || 0)
-      };
-    });
+        return {
+          name,
+          sector,
+          liberation: Math.max(0, Math.min(100, liberation)),
+          owner: (owner === "Humans" || owner === "Terminids" || owner === "Automaton" || owner === "Illuminate") ? owner : "Humans",
+          health: s.health || p.health || 0,
+          maxHealth: s.maxHealth || p.maxHealth || 1000,
+          players
+        };
+      })
+      .filter((p: any) => p.name !== "Pianeta Ignoto") // Filter out obviously failed mappings
+      .slice(0, 10);
 
     const result: WarStatus = {
       time: new Date().toISOString(),

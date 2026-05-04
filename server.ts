@@ -7,16 +7,50 @@ import cors from "cors";
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
 
-// Cache for War Data
 let warCache: { data: any; ts: number } | null = null;
 const CACHE_TTL = 60_000; // 60 seconds
 
+async function fetchWithRetry(url: string, options: RequestInit, maxRetries = 3) {
+  for (let i = 0; i <= maxRetries; i++) {
+    try {
+      const controller = new AbortController();
+      const timeoutId = setTimeout(() => controller.abort(), 8000);
+      
+      const res = await fetch(url, { ...options, signal: controller.signal });
+      clearTimeout(timeoutId);
+
+      if (res.status === 429 && i < maxRetries) {
+        const delay = (Math.pow(2, i) * 1000) + (Math.random() * 1000);
+        console.warn(`[WAR_PROXY] Rate limited (429) on ${url}. Retry ${i+1}/${maxRetries} in ${Math.round(delay)}ms`);
+        await new Promise(r => setTimeout(r, delay));
+        continue;
+      }
+      return res;
+    } catch (e: any) {
+      if (i === maxRetries) throw e;
+      console.warn(`[WAR_PROXY] Fetch error on ${url}: ${e.message}. Retrying...`);
+      await new Promise(r => setTimeout(r, 1000));
+    }
+  }
+  throw new Error("Max retries exceeded");
+}
+
 async function startServer() {
   const app = express();
-  const PORT = parseInt(process.env.PORT || "8080");
+  const PORT = parseInt(process.env.PORT || "3000");
 
-  // Middleware
-  app.use(cors());
+  // ✅ CORS — Explicit Trusted Origins
+  const frontendUrls = process.env.FRONTEND_URLS?.split(",") || [
+    "https://ais-dev-joxd6nj7vyc42swn6qbqb6-788823666053.europe-west2.run.app",
+    "https://ais-pre-joxd6nj7vyc42swn6qbqb6-788823666053.europe-west2.run.app"
+  ];
+  
+  app.use(cors({
+    origin: frontendUrls,
+    methods: ["GET", "POST"],
+    allowedHeaders: ["Content-Type", "X-Super-Client", "X-Super-Contact"]
+  }));
+  
   app.use(express.json());
 
   // Gemini AI Route
@@ -29,9 +63,6 @@ async function startServer() {
         return res.status(500).json({ error: "Gemini API Key configuration missing" });
       }
 
-      // We'll use a direct fetch to the Gemini API to avoid SDK version issues in server.ts
-      // or we can use the SDK if we ensure it's compatible. 
-      // Let's use the REST API for maximum reliability here as requested in your report.
       const prompt = `Sei un Ufficiale Scientifico di Super Terra. 
       Contesto missione: ${JSON.stringify(context)}
       Messaggio Helldiver: ${message}
@@ -64,115 +95,77 @@ async function startServer() {
       return res.json(warCache.data);
     }
 
-    const tryFetch = async (baseUrl: string) => {
-      const controller = new AbortController();
-      const timeoutId = setTimeout(() => controller.abort(), 8000);
-      
-      const fetchOptions = { 
-        headers: { 
-          'User-Agent': 'Helldivers2TacticalAnalyst/1.0 (Super Earth Ministry of Truth)',
-          'Accept': 'application/json',
-          'Accept-Language': 'en-US,en;q=0.9'
-        },
-        signal: controller.signal
-      };
-
-      try {
-        console.log(`[WAR_PROXY] Tentativo di recupero dati da: ${baseUrl}`);
-        
-        // We try to fetch the most critical endpoints
-        const [warRes, assignmentsRes, campaignsRes] = await Promise.all([
-          fetch(`${baseUrl}/war`, fetchOptions).catch(e => { console.error(`[WAR_PROXY] Fetch error /war from ${baseUrl}:`, e.message); return null; }),
-          fetch(`${baseUrl}/assignments`, fetchOptions).catch(e => { console.error(`[WAR_PROXY] Fetch error /assignments from ${baseUrl}:`, e.message); return null; }),
-          fetch(`${baseUrl}/campaigns`, fetchOptions).catch(e => { console.error(`[WAR_PROXY] Fetch error /campaigns from ${baseUrl}:`, e.message); return null; })
-        ]);
-
-        let warData = warRes && warRes.ok ? await warRes.json().catch(() => null) : null;
-        let assignmentsData = assignmentsRes && assignmentsRes.ok ? await assignmentsRes.json().catch(() => null) : null;
-        let campaignsData = campaignsRes && campaignsRes.ok ? await campaignsRes.json().catch(() => null) : null;
-
-        // Fallback: Some APIs (like Diveharder) might have different structures or combined status
-        if (!warData && !assignmentsData && !campaignsData) {
-           console.log(`[WAR_PROXY] Verificando endpoint alternativi (/status) su ${baseUrl}`);
-           const statusRes = await fetch(`${baseUrl}/status`, fetchOptions).catch(() => null);
-           if (statusRes && statusRes.ok) {
-             const statusData = await statusRes.json().catch(() => null);
-             if (statusData) {
-               warData = statusData;
-               assignmentsData = statusData.assignments || statusData.Assignments || statusData.majorOrder;
-               campaignsData = statusData.campaigns || statusData.Campaigns || statusData.activeCampaigns;
-             }
-           }
-        }
-
-        // Final consistency check
-        const finalAssignments = Array.isArray(assignmentsData) ? assignmentsData : (warData?.assignments || []);
-        const finalCampaigns = Array.isArray(campaignsData) ? campaignsData : (warData?.campaigns || warData?.activeCampaigns || []);
-
-        if (finalCampaigns.length > 0 || finalAssignments.length > 0 || (warData && warData.warId)) {
-          console.log(`[WAR_PROXY] Successo parziale/totale da ${baseUrl}`);
-          return {
-            war: warData || {},
-            assignments: Array.isArray(finalAssignments) ? finalAssignments : [],
-            campaigns: Array.isArray(finalCampaigns) ? finalCampaigns : [],
-            timestamp: new Date().toISOString(),
-            source: baseUrl
-          };
-        }
-      } catch (e) {
-        console.error(`[WAR_PROXY] Errore critico durante il fetch da ${baseUrl}:`, e instanceof Error ? e.message : e);
-      } finally {
-        clearTimeout(timeoutId);
-      }
-      return null;
+    const HEADERS = {
+      'User-Agent': 'HelldiversAiBot/1.0 (Super Earth Ministry of Truth)',
+      'X-Super-Client': 'HelldiversAiBot',
+      'X-Super-Contact': 'itsgoles',
+      'Accept': 'application/json'
     };
 
     try {
-      // Expanded Priority List of Helldivers 2 Community APIs
-      const apiSources = [
-        "https://api.helldivers2.dev/api/v1",
-        "https://helldivers-2-api.vercel.app/api/v1",
-        "https://helldivers-2-dotnet.vercel.app/api/v1",
-        "https://api.live.helldivers2.dev/api/v1",
-        "https://hds.mivv.bot/api/v1",
-        "https://api.diveharder.com/v1",
-        "https://hellhub.app/api/v1",
-        "https://galactic-war.fly.dev/api/v1"
-      ];
+      // 1. PRIMARY API: Helldivers Training Manual (Stable 2026)
+      const primaryRes = await fetchWithRetry("https://helldiverstrainingmanual.com/api/v1/war/status", { headers: HEADERS }).catch(() => null);
+      
+      if (primaryRes && primaryRes.ok) {
+        const data = await primaryRes.json();
+        const payload = {
+          war: data,
+          assignments: [{ 
+            title: "ORDINE MAGGIORE", 
+            briefing: data.majorOrder || "Libera la galassia!",
+            progress: [data.majorOrderProgress || 0.5],
+            expiresAt: data.majorOrderExpiresAt || new Date(Date.now() + 86400000).toISOString()
+          }],
+          campaigns: data.planetStatus || data.campaigns || [],
+          timestamp: new Date().toISOString(),
+          source: "https://helldiverstrainingmanual.com"
+        };
+        warCache = { data: payload, ts: now };
+        return res.json(payload);
+      }
 
-      let result = null;
-      for (const source of apiSources) {
-        result = await tryFetch(source);
-        if (result) break;
+      // 2. SECONDARY: Helldivers2.dev
+      console.log("[WAR_PROXY] Provo secondaria via helldivers2.dev");
+      const [assignRes, campRes] = await Promise.all([
+        fetchWithRetry("https://api.helldivers2.dev/api/v1/assignments/13", { headers: HEADERS }).catch(() => null),
+        fetchWithRetry("https://api.helldivers2.dev/api/v1/campaigns", { headers: HEADERS }).catch(() => null)
+      ]);
+
+      if ((assignRes && assignRes.ok) || (campRes && campRes.ok)) {
+        const assignmentsData = assignRes && assignRes.ok ? await assignRes.json() : [];
+        const campaignsData = campRes && campRes.ok ? await campRes.json() : [];
+        
+        const payload = {
+          war: {},
+          assignments: Array.isArray(assignmentsData) ? assignmentsData : (assignmentsData ? [assignmentsData] : []),
+          campaigns: Array.isArray(campaignsData) ? campaignsData : [],
+          timestamp: new Date().toISOString(),
+          source: "https://api.helldivers2.dev"
+        };
+        warCache = { data: payload, ts: now };
+        return res.json(payload);
       }
 
       // EMERGENCY FALLBACK (Democracy Guard)
-      // If all APIs fail, return a simulated tactical context so the app doesn't break
-      if (!result) {
-        console.warn("[WAR_PROXY] Tutte le sorgenti API hanno fallito. Attivazione Protocollo Emergenza (MOCK DATA).");
-        result = {
-          war: { warId: 888, season: 1 },
-          assignments: [{
-            title: "DIFESA DELLA DEMOCRAZIA",
-            briefing: "Interferenze nemiche hanno interrotto i collegamenti satellitari. Procedere con cautela in tutti i settori. La libertà non si ferma mai.",
-            progress: [0.75],
-            expiresAt: new Date(Date.now() + 86400000).toISOString()
-          }],
-          campaigns: [
-            { planet: { name: "Cura", sector: "Settore Ustica", health: 1000, maxHealth: 5000, owner: "Humans" } },
-            { planet: { name: "Vandalon IV", sector: "Settore Xzar", health: 4000, maxHealth: 5000, owner: "Automaton" } },
-            { planet: { name: "Estanu", sector: "Settore L'estran", health: 2000, maxHealth: 5000, owner: "Terminids" } }
-          ],
-          timestamp: new Date().toISOString(),
-          source: "Protocollo Emergenza Super Terra",
-          isMock: true
-        };
-      }
-
-      // Update cache
-      warCache = { data: result, ts: now };
-
-      res.json(result);
+      console.warn("[WAR_PROXY] Tutte le sorgenti API hanno fallito. Protocollo Emergenza.");
+      const fallback = {
+        war: { warId: 2026 },
+        assignments: [{
+          title: "DIFESA DELLA DEMOCRAZIA",
+          briefing: "Segnale interrotto dal Ministero della Verità per manutenzione. Continua a combattere Helldiver!",
+          progress: [0.5],
+          expiresAt: new Date(Date.now() + 86400000).toISOString()
+        }],
+        campaigns: [
+          { name: "Cura", sector: "Ustica", owner: "Humans", liberation: 100 },
+          { name: "Vandalon IV", sector: "Xzar", owner: "Automaton", liberation: 25 }
+        ],
+        timestamp: new Date().toISOString(),
+        source: "Super Earth Emergency Protocol",
+        isMock: true
+      };
+      
+      res.json(fallback);
     } catch (error) {
       console.error("Proxy Error:", error);
       res.status(500).json({ error: "Errore fatale nelle comunicazioni del Quartier Generale." });
