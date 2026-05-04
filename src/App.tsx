@@ -581,7 +581,14 @@ export default function App() {
 
               <div className="pt-12 text-center">
                  <button 
-                  onClick={() => window.location.reload()}
+                  onClick={() => {
+                    setStep('intro');
+                    setAnalysis(null);
+                    setQuizAnswers({});
+                    setCurrentQuestionIndex(0);
+                    setQuizType(null);
+                    setManualStats({});
+                  }}
                   className="inline-flex items-center gap-2 border border-superearth-yellow/20 px-8 py-3 font-bold uppercase italic text-xs tracking-widest hover:bg-superearth-yellow hover:text-black transition-all"
                 >
                   <RefreshCw className="w-4 h-4" /> Riavvia Analisi Tattica
@@ -677,23 +684,6 @@ export default function App() {
          <div className="absolute inset-0 bg-[radial-gradient(circle_at_50%_50%,rgba(255,225,0,0.03),transparent_70%)]" />
          <div className="absolute top-0 left-0 w-full h-[2px] bg-superearth-yellow/10 shadow-[0_0_20px_rgba(255,225,0,0.5)] animate-scanline" />
       </div>
-
-      <style dangerouslySetInnerHTML={{ __html: `
-        @keyframes scanline {
-          0% { top: 0; }
-          100% { top: 100%; }
-        }
-        .animate-scanline {
-          animation: scanline 8s linear infinite;
-        }
-        .scrollbar-hide::-webkit-scrollbar {
-          display: none;
-        }
-        .scrollbar-hide {
-          -ms-overflow-style: none;
-          scrollbar-width: none;
-        }
-      `}} />
     </div>
   );
 }

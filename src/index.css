@@ -40,3 +40,21 @@
   animation: flicker 0.1s infinite alternate;
 }
 
+@keyframes scanline {
+  0% { top: 0; }
+  100% { top: 100%; }
+}
+
+.animate-scanline {
+  animation: scanline 8s linear infinite;
+}
+
+.scrollbar-hide::-webkit-scrollbar {
+  display: none;
+}
+
+.scrollbar-hide {
+  -ms-overflow-style: none;
+  scrollbar-width: none;
+}
+
