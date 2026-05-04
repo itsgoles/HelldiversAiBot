@@ -1,0 +1,10 @@
+{
+  "name": "Helldivers 2 Tactical Analyst",
+  "description": "Analista strategico per Helldivers 2: quiz di stile, build personalizzate e bollettino della Guerra Galattica in tempo reale.",
+  "requestFramePermissions": [],
+  "majorCapabilities": [
+    "AI-powered analysis",
+    "Live API integration",
+    "Custom build engine"
+  ]
+}

@@ -1,0 +1,42 @@
+@import url('https://fonts.googleapis.com/css2?family=Outfit:wght@400;700;900&family=JetBrains+Mono:wght@400;700&display=swap');
+@import "tailwindcss";
+
+@theme {
+  --font-sans: "Outfit", ui-sans-serif, system-ui, sans-serif;
+  --font-mono: "JetBrains Mono", ui-monospace, SFMono-Regular, monospace;
+  
+  --color-superearth-yellow: #FFE100;
+  --color-superearth-dark: #0D0D0D;
+  --color-superearth-grey: #1A1A1A;
+}
+
+@layer base {
+  body {
+    @apply bg-superearth-dark text-white font-sans antialiased;
+  }
+}
+
+.terminal-border {
+  border: 2px solid theme('colors.superearth-yellow');
+  box-shadow: 0 0 10px rgba(255, 225, 0, 0.3);
+}
+
+.propaganda-text {
+  text-transform: uppercase;
+  font-weight: 900;
+  letter-spacing: 0.1em;
+}
+
+@keyframes flicker {
+  0% { opacity: 0.97; }
+  5% { opacity: 0.95; }
+  10% { opacity: 0.9; }
+  15% { opacity: 0.95; }
+  20% { opacity: 0.98; }
+  100% { opacity: 1; }
+}
+
+.flicker {
+  animation: flicker 0.1s infinite alternate;
+}
+
