@@ -221,7 +221,10 @@ export default function App() {
                 {activeQuestions[currentQuestionIndex].text}
               </h3>
 
-              <div className="grid gap-4">
+              <div className={cn(
+                "grid gap-4",
+                activeQuestions[currentQuestionIndex].type === 'likert' ? "grid-cols-1 sm:grid-cols-5" : "grid-cols-1"
+              )}>
                 {activeQuestions[currentQuestionIndex].options.map((opt) => (
                   <button
                     key={opt.value}
@@ -229,6 +232,7 @@ export default function App() {
                     onClick={() => handleQuizAnswer(opt.value)}
                     className={cn(
                       "text-left p-6 border transition-all group flex items-center justify-between relative overflow-hidden",
+                      activeQuestions[currentQuestionIndex].type === 'likert' && "flex-col text-center justify-center p-4",
                       lastSelectedAnswer === opt.value
                         ? "bg-superearth-yellow text-black border-white"
                         : quizAnswers[activeQuestions[currentQuestionIndex].id] === opt.value
@@ -236,17 +240,21 @@ export default function App() {
                           : "border-superearth-yellow/20 bg-superearth-dark hover:bg-superearth-yellow hover:text-black"
                     )}
                   >
-                    <span className="text-lg font-bold uppercase italic relative z-10">{opt.label}</span>
-                    <div className="flex items-center gap-3 relative z-10">
-                      {lastSelectedAnswer === opt.value && (
+                    <span className={cn(
+                      "font-bold uppercase italic relative z-10",
+                      activeQuestions[currentQuestionIndex].type === 'likert' ? "text-xs" : "text-lg"
+                    )}>{opt.label}</span>
+                    <div className={cn("relative z-10", activeQuestions[currentQuestionIndex].type === 'likert' ? "mt-4" : "flex items-center gap-3")}>
+                      {lastSelectedAnswer === opt.value ? (
                         <motion.div initial={{ scale: 0 }} animate={{ scale: 1 }}>
                           <Check className="w-6 h-6" />
                         </motion.div>
+                      ) : (
+                        <ArrowRight className={cn(
+                          "transition-all",
+                          activeQuestions[currentQuestionIndex].type === 'likert' ? "opacity-20 group-hover:opacity-100 group-hover:translate-y-1 rotate-90" : "opacity-0 group-hover:opacity-100 group-hover:translate-x-1"
+                        )} />
                       )}
-                      <ArrowRight className={cn(
-                        "transition-all",
-                        lastSelectedAnswer === opt.value ? "opacity-0" : "opacity-0 group-hover:opacity-100 group-hover:translate-x-1"
-                      )} />
                     </div>
                     {lastSelectedAnswer === opt.value && (
                       <motion.div 
