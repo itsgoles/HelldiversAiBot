@@ -8,7 +8,8 @@ const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
 
 let warCache: { data: any; ts: number } | null = null;
-const CACHE_TTL = 60_000; // 60 seconds
+const CACHE_FRESH = 30_000; // 30 seconds
+const CACHE_STALE = 300_000; // 5 minutes
 
 async function fetchWithRetry(url: string, options: RequestInit, maxRetries = 3) {
   for (let i = 0; i <= maxRetries; i++) {
@@ -88,66 +89,84 @@ async function startServer() {
     }
   });
 
-  // API Proxy Route for Helldivers 2 with Cache and Resilient Fallback
+  // API Proxy Route for Helldivers 2 with SWR Cache
   app.get("/api/war-data", async (req, res) => {
     const now = Date.now();
-    if (warCache && now - warCache.ts < CACHE_TTL) {
-      return res.json(warCache.data);
-    }
+    
+    const updateCache = async () => {
+      const HEADERS = {
+        'User-Agent': 'HelldiversAiBot/1.0 (Super Earth Ministry of Truth)',
+        'X-Super-Client': 'HelldiversAiBot',
+        'X-Super-Contact': 'itsgoles',
+        'Accept': 'application/json'
+      };
 
-    const HEADERS = {
-      'User-Agent': 'HelldiversAiBot/1.0 (Super Earth Ministry of Truth)',
-      'X-Super-Client': 'HelldiversAiBot',
-      'X-Super-Contact': 'itsgoles',
-      'Accept': 'application/json'
+      try {
+        // 1. PRIMARY API: Helldivers Training Manual (Stable 2026)
+        const primaryRes = await fetchWithRetry("https://helldiverstrainingmanual.com/api/v1/war/status", { headers: HEADERS }).catch(() => null);
+        
+        if (primaryRes && primaryRes.ok) {
+          const data = await primaryRes.json();
+          const payload = {
+            war: data,
+            assignments: [{ 
+              title: "ORDINE MAGGIORE", 
+              briefing: data.majorOrder || "Libera la galassia!",
+              progress: [data.majorOrderProgress || 0.5],
+              expiresAt: data.majorOrderExpiresAt || new Date(Date.now() + 86400000).toISOString()
+            }],
+            campaigns: data.planetStatus || data.campaigns || [],
+            timestamp: new Date().toISOString(),
+            source: "https://helldiverstrainingmanual.com"
+          };
+          warCache = { data: payload, ts: Date.now() };
+          return;
+        }
+
+        // 2. SECONDARY: Helldivers2.dev
+        const [assignRes, campRes] = await Promise.all([
+          fetchWithRetry("https://api.helldivers2.dev/api/v1/assignments/13", { headers: HEADERS }).catch(() => null),
+          fetchWithRetry("https://api.helldivers2.dev/api/v1/campaigns", { headers: HEADERS }).catch(() => null)
+        ]);
+
+        if ((assignRes && assignRes.ok) || (campRes && campRes.ok)) {
+          const assignmentsData = assignRes && assignRes.ok ? await assignRes.json() : [];
+          const campaignsData = campRes && campRes.ok ? await campRes.json() : [];
+          
+          const payload = {
+            war: {},
+            assignments: Array.isArray(assignmentsData) ? assignmentsData : (assignmentsData ? [assignmentsData] : []),
+            campaigns: Array.isArray(campaignsData) ? campaignsData : [],
+            timestamp: new Date().toISOString(),
+            source: "https://api.helldivers2.dev"
+          };
+          warCache = { data: payload, ts: Date.now() };
+        }
+      } catch (error) {
+        console.error("[WAR_PROXY] Background Update Error:", error);
+      }
     };
 
-    try {
-      // 1. PRIMARY API: Helldivers Training Manual (Stable 2026)
-      const primaryRes = await fetchWithRetry("https://helldiverstrainingmanual.com/api/v1/war/status", { headers: HEADERS }).catch(() => null);
-      
-      if (primaryRes && primaryRes.ok) {
-        const data = await primaryRes.json();
-        const payload = {
-          war: data,
-          assignments: [{ 
-            title: "ORDINE MAGGIORE", 
-            briefing: data.majorOrder || "Libera la galassia!",
-            progress: [data.majorOrderProgress || 0.5],
-            expiresAt: data.majorOrderExpiresAt || new Date(Date.now() + 86400000).toISOString()
-          }],
-          campaigns: data.planetStatus || data.campaigns || [],
-          timestamp: new Date().toISOString(),
-          source: "https://helldiverstrainingmanual.com"
-        };
-        warCache = { data: payload, ts: now };
-        return res.json(payload);
+    // Stale-While-Revalidate Logic
+    if (warCache) {
+      const age = now - warCache.ts;
+      if (age < CACHE_FRESH) {
+        return res.json(warCache.data);
+      } else if (age < CACHE_STALE) {
+        // Return stale data immediately and revalidate in background
+        res.json(warCache.data);
+        updateCache();
+        return;
       }
+    }
 
-      // 2. SECONDARY: Helldivers2.dev
-      console.log("[WAR_PROXY] Provo secondaria via helldivers2.dev");
-      const [assignRes, campRes] = await Promise.all([
-        fetchWithRetry("https://api.helldivers2.dev/api/v1/assignments/13", { headers: HEADERS }).catch(() => null),
-        fetchWithRetry("https://api.helldivers2.dev/api/v1/campaigns", { headers: HEADERS }).catch(() => null)
-      ]);
-
-      if ((assignRes && assignRes.ok) || (campRes && campRes.ok)) {
-        const assignmentsData = assignRes && assignRes.ok ? await assignRes.json() : [];
-        const campaignsData = campRes && campRes.ok ? await campRes.json() : [];
-        
-        const payload = {
-          war: {},
-          assignments: Array.isArray(assignmentsData) ? assignmentsData : (assignmentsData ? [assignmentsData] : []),
-          campaigns: Array.isArray(campaignsData) ? campaignsData : [],
-          timestamp: new Date().toISOString(),
-          source: "https://api.helldivers2.dev"
-        };
-        warCache = { data: payload, ts: now };
-        return res.json(payload);
-      }
-
+    // No cache or very old data
+    await updateCache();
+    
+    if (warCache) {
+      res.json(warCache.data);
+    } else {
       // EMERGENCY FALLBACK (Democracy Guard)
-      console.warn("[WAR_PROXY] Tutte le sorgenti API hanno fallito. Protocollo Emergenza.");
       const fallback = {
         war: { warId: 2026 },
         assignments: [{
@@ -164,11 +183,7 @@ async function startServer() {
         source: "Super Earth Emergency Protocol",
         isMock: true
       };
-      
       res.json(fallback);
-    } catch (error) {
-      console.error("Proxy Error:", error);
-      res.status(500).json({ error: "Errore fatale nelle comunicazioni del Quartier Generale." });
     }
   });
 

@@ -17,6 +17,9 @@ export interface WarStatus {
     health: number;
     maxHealth: number;
     players: number;
+    isDefense?: boolean;
+    thumbnail?: string;
+    timeRemaining?: string;
   }[];
 }
 
@@ -29,6 +32,23 @@ export interface WarStatusError {
   type: 'timeout' | 'offline' | 'invalid_data' | 'server_error';
   message: string;
 }
+
+// Faction translations
+const fictionsMap: Record<string, string> = {
+  "Humans": "Super Terra",
+  "Terminids": "Terminidi",
+  "Automaton": "Automi",
+  "Illuminate": "Illuminati"
+};
+
+// Common sector translations (partial list, will fallback to original if not found)
+const sectorsMap: Record<string, string> = {
+  "Umlaut": "Sotto-settore Umlaut",
+  "Orion": "Settore Orion",
+  "Xzar": "Settore Xzar",
+  "Ustica": "Settore Ustica",
+  "L'estran": "Settore L'estran"
+};
 
 export async function fetchWarStatus(): Promise<WarStatus | null> {
   // Try local cache first if we're quickly re-accessing
@@ -53,17 +73,21 @@ export async function fetchWarStatus(): Promise<WarStatus | null> {
     clearTimeout(timeoutId);
     
     if (!response.ok) {
-      if (response.status === 404) throw new Error("MINISTERO_PIANETI_NON_TROVATI");
-      if (response.status === 504) throw new Error("GATEWAY_TIMEOUT_SATELLITE");
+      const status = response.status;
+      if (status === 404) throw new Error("ERRORE_404_SATELLITE_NON_TROVATO");
+      if (status === 429) throw new Error("ERRORE_429_LIMITAZIONE_MINISTERIALE");
+      if (status === 500) throw new Error("ERRORE_500_QG_OFFLINE");
+      if (status === 503) throw new Error("ERRORE_503_MANUTENZIONE_RETE");
+      if (status === 504) throw new Error("ERRORE_504_TIMEOUT_SATELLITE");
       const errorData = await response.json().catch(() => ({}));
-      throw new Error(errorData.error || "ERRORE_CONNESSIONE_SUPER_TERRA");
+      throw new Error(errorData.error || `ERRORE_CONNESSIONE_${status}`);
     }
     
     const data = await response.json();
     console.log("[WAR_SERVICE] Raw Data Received:", JSON.stringify(data).substring(0, 500) + "...");
     
-    if (!data || (!data.campaigns && !data.assignments)) {
-      throw new Error("DATI_VUOTI_DALLA_RETE");
+    if (!data || (!data.campaigns && !data.assignments && !data.war)) {
+      throw new Error("ERRORE_DATI_CORROTTI_O_VUOTI");
     }
 
     const { assignments, campaigns, war } = data;
@@ -111,22 +135,35 @@ export async function fetchWarStatus(): Promise<WarStatus | null> {
         
         // Better liberation logic: direct field or calculate from health
         let liberation = 0;
+        let isDefense = false;
+
         if (typeof p.liberation === 'number') {
           liberation = p.liberation;
         } else if (typeof s.health === 'number' && typeof s.maxHealth === 'number' && s.maxHealth > 0) {
           liberation = 100 - ((s.health / s.maxHealth) * 100);
-        } else if (typeof p.health === 'number' && typeof p.maxHealth === 'number' && p.maxHealth > 0) {
-          liberation = 100 - ((p.health / p.maxHealth) * 100);
         }
+
+        // Defense detection (liberation usually represents enemy progress on human planets)
+        if (owner === "Humans" && liberation < 100) {
+          isDefense = true;
+          // In defense, we show Super Earth progress (flipping it if the API gives current enemy health)
+          if (liberation > 0 && liberation < 100) liberation = 100 - liberation;
+        }
+
+        // Time estimation (simulated based on players if not in API)
+        const timeRemaining = p.players > 5000 ? "Libertà in circa 12 ore" : "Forze schiaccianti attestate";
 
         return {
           name,
-          sector,
+          sector: sectorsMap[sector] || sector,
           liberation: Math.max(0, Math.min(100, liberation)),
           owner: (owner === "Humans" || owner === "Terminids" || owner === "Automaton" || owner === "Illuminate") ? owner : "Humans",
           health: s.health || p.health || 0,
           maxHealth: s.maxHealth || p.maxHealth || 1000,
-          players
+          players,
+          isDefense,
+          timeRemaining,
+          thumbnail: `https://images.unsplash.com/photo-1614728263952-84ea206f25b2?auto=format&fit=crop&q=80&w=300&h=150` // Placeholder cinematic planet
         };
       })
       .filter((p: any) => p.name !== "Pianeta Ignoto") // Filter out obviously failed mappings

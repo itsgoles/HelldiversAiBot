@@ -1,6 +1,20 @@
 import React from 'react';
 import { motion } from 'motion/react';
-import { Info, Crosshair, Map as MapIcon, Satellite, WifiOff, RefreshCw } from 'lucide-react';
+import { 
+  Info, 
+  Crosshair, 
+  Map as MapIcon, 
+  Satellite, 
+  WifiOff, 
+  RefreshCw,
+  Bug,
+  Bot,
+  Zap,
+  Globe,
+  BarChart2,
+  MapPin,
+  Shield
+} from 'lucide-react';
 import { WarStatus } from '../services/warService';
 import { clsx, type ClassValue } from 'clsx';
 import { twMerge } from 'tailwind-merge';
@@ -130,10 +144,38 @@ export const WarStatusView: React.FC<WarStatusViewProps> = ({ warData, isLoading
     );
   }
 
+  const translateOwner = (owner: string) => {
+    const map: Record<string, string> = {
+      'Humans': 'Super Terra',
+      'Terminids': 'Terminidi',
+      'Automaton': 'Automi',
+      'Illuminate': 'Illuminati',
+      'Terminidi': 'Terminidi'
+    };
+    return map[owner] || owner;
+  };
+
+  const getThreatIcon = (owner: string) => {
+    switch (owner) {
+      case 'Terminids':
+      case 'Terminidi':
+        return <Bug className="w-3 h-3" />;
+      case 'Automaton':
+        return <Bot className="w-3 h-3" />;
+      case 'Illuminate':
+        return <Zap className="w-3 h-3" />;
+      case 'Humans':
+      case 'Super Terra':
+        return <Globe className="w-3 h-3" />;
+      default:
+        return <Crosshair className="w-3 h-3" />;
+    }
+  };
+
   if (!warData) return null;
 
   return (
-    <div className="space-y-6">
+    <div className="space-y-8">
       <div className="flex justify-between items-center px-1">
          <div className="flex items-center gap-2 text-[10px] font-mono opacity-40 uppercase tracking-widest">
             <span className="w-2 h-2 rounded-full bg-superearth-yellow animate-pulse" />
@@ -147,62 +189,143 @@ export const WarStatusView: React.FC<WarStatusViewProps> = ({ warData, isLoading
       </div>
 
       {warData.majorOrder && (
-        <div className="terminal-border bg-superearth-yellow p-6 text-black">
-          <div className="flex items-center gap-3 mb-4">
-            <Info className="w-8 h-8" />
-            <h4 className="font-black text-2xl uppercase italic">ORDINE MAGGIORE ATTIVO</h4>
+        <div className="terminal-border bg-superearth-yellow p-6 text-black relative overflow-hidden">
+          <div className="absolute top-0 right-0 p-4 opacity-10 rotate-12">
+            <MapIcon className="w-24 h-24" />
           </div>
-          <h5 className="font-black text-xl mb-1">{warData.majorOrder.title}</h5>
-          <p className="font-bold mb-6 opacity-80">{warData.majorOrder.description}</p>
-          <div className="space-y-1">
-             <div className="flex justify-between font-mono text-xs font-bold uppercase">
-               <span>Progresso Campagna</span>
-               <span>{warData.majorOrder.progress.toFixed(1)}%</span>
-             </div>
-             <div className="h-4 bg-black/20 w-full">
-                <div className="h-full bg-black shadow-[0_0_10px_rgba(0,0,0,0.5)]" style={{ width: `${warData.majorOrder.progress}%` }} />
-             </div>
+          <div className="relative z-10">
+            <div className="flex items-center gap-3 mb-4">
+              <Info className="w-8 h-8" />
+              <h4 className="font-black text-2xl uppercase italic">ORDINE MAGGIORE ATTIVO</h4>
+            </div>
+            <h5 className="font-black text-2xl mb-2 tracking-tight">{warData.majorOrder.title}</h5>
+            <p className="font-bold text-lg mb-8 leading-tight opacity-90">{warData.majorOrder.description}</p>
+            <div className="space-y-2">
+               <div className="flex justify-between font-mono text-xs font-bold uppercase tracking-widest">
+                 <span>Progresso Operativo</span>
+                 <span>{warData.majorOrder.progress.toFixed(1)}%</span>
+               </div>
+               <div className="h-6 bg-black/20 w-full p-1 border border-black/10">
+                  <motion.div 
+                    initial={{ width: 0 }}
+                    animate={{ width: `${warData.majorOrder.progress}%` }}
+                    className="h-full bg-black shadow-[0_0_15px_rgba(0,0,0,0.3)] relative"
+                  >
+                    <div className="absolute inset-0 bg-gradient-to-r from-transparent via-white/10 to-transparent animate-pulse" />
+                  </motion.div>
+               </div>
+            </div>
           </div>
         </div>
       )}
 
-      <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-6">
-         {warData.activePlanets.length > 0 ? (
-           warData.activePlanets.map((p, i) => (
-             <div key={i} className="terminal-border p-4 bg-superearth-grey/40 group hover:bg-superearth-grey/60 transition-colors text-left">
-                <div className="flex justify-between items-start mb-4">
-                   <div>
-                     <h5 className="font-black text-lg text-superearth-yellow">{p.name}</h5>
-                     <p className="text-[10px] font-mono opacity-50 uppercase">{p.sector}</p>
-                   </div>
-                   <div className={cn(
-                     "px-2 py-0.5 text-[9px] font-black uppercase rounded-sm",
-                     p.owner === 'Terminids' || p.owner === 'Terminidi' ? "bg-orange-500" : 
-                     p.owner === 'Automaton' ? "bg-red-600" : 
-                     p.owner === 'Humans' ? "bg-superearth-yellow text-black" : "bg-purple-600"
-                   )}>
-                     {p.owner}
-                   </div>
-                </div>
-                <div className="space-y-1 mt-4">
-                   <div className="flex justify-between text-[10px] font-mono uppercase">
-                      <span>Liberazione</span>
-                      <span>{p.liberation.toFixed(1)}%</span>
-                   </div>
-                   <div className="h-1.5 bg-black/40 w-full overflow-hidden">
-                      <div className="h-full bg-superearth-yellow" style={{ width: `${p.liberation}%` }} />
-                   </div>
-                </div>
-                <div className="mt-4 flex items-center justify-between text-[10px] font-mono opacity-40">
-                   <span className="flex items-center gap-1 font-bold"><Crosshair className="w-3 h-3" /> {p.players.toLocaleString()} HELIVERS</span>
-                </div>
+      <div className="space-y-4">
+        <h3 className="text-white font-black uppercase text-3xl tracking-tighter mb-6">
+          SFORZI ATTIVI
+        </h3>
+        
+        <div className="flex flex-col gap-4">
+           {warData.activePlanets.length > 0 ? (
+             warData.activePlanets.map((p, i) => (
+               <motion.div 
+                 key={i} 
+                 initial={{ opacity: 0, x: -10 }}
+                 animate={{ opacity: 1, x: 0 }}
+                 transition={{ delay: i * 0.05 }}
+                 className="flex flex-col md:flex-row bg-[#0D0D0D] border border-white/5 overflow-hidden group hover:border-superearth-yellow/30 transition-colors"
+               >
+                  {/* Planet Thumbnail Section */}
+                  <div className="w-full md:w-64 h-40 md:h-auto relative shrink-0">
+                    <img 
+                      src={p.thumbnail} 
+                      alt={p.name} 
+                      className="w-full h-full object-cover opacity-60 group-hover:opacity-80 transition-opacity"
+                    />
+                    <div className="absolute inset-0 bg-gradient-to-r from-black/80 via-black/20 to-transparent" />
+                    
+                    <div className="absolute bottom-4 left-4 space-y-2">
+                       <h5 className="font-black text-2xl text-white tracking-widest uppercase">{p.name}</h5>
+                       <div className="flex items-center gap-3 opacity-80 text-white">
+                          <BarChart2 className="w-4 h-4" />
+                          <MapPin className="w-4 h-4" />
+                          <Info className="w-4 h-4" />
+                       </div>
+                    </div>
+                  </div>
+
+                  {/* Operational Data Section */}
+                  <div className="flex-grow p-4 space-y-3 flex flex-col justify-center">
+                    {/* Progress Bar Container */}
+                    <div className="relative">
+                      <div className="h-6 w-full bg-[#1A1A1A] flex items-center relative">
+                        {p.isDefense ? (
+                          <>
+                             <motion.div 
+                               initial={{ width: 0 }}
+                               animate={{ width: `${p.liberation}%` }}
+                               className="h-full bg-[#3AB6FF] shadow-[0_0_15px_#3AB6FF44]"
+                             />
+                             <div className="h-full flex-grow bg-[#FFB800]" />
+                             <div className="absolute top-1/2 left-[50%] -translate-y-1/2 -translate-x-1/2 z-10">
+                               <div className="bg-white p-1 rounded-full shadow-lg border-2 border-black">
+                                 <Shield className="w-3 h-3 text-black fill-current" />
+                               </div>
+                             </div>
+                          </>
+                        ) : (
+                          <>
+                             <motion.div 
+                               initial={{ width: 0 }}
+                               animate={{ width: `${p.liberation}%` }}
+                               className={cn(
+                                 "h-full",
+                                 p.owner === 'Terminids' || p.owner === 'Terminidi' ? "bg-orange-500" : 
+                                 p.owner === 'Automaton' ? "bg-red-600" : "bg-purple-600"
+                               )}
+                             />
+                             <div className="h-full flex-grow bg-[#FFB800]" />
+                          </>
+                        )}
+                      </div>
+                    </div>
+
+                    {/* Faction and Status Text */}
+                    <div className="flex justify-between items-end">
+                       <div className="space-y-1">
+                          <div className="flex items-center gap-2">
+                             <div className={cn(
+                               "text-[11px] font-black italic flex items-center gap-1",
+                               p.isDefense ? "text-[#3AB6FF]" : "text-white"
+                             )}>
+                               {p.isDefense ? "▶▶" : "◀"} {p.liberation.toFixed(4)}% {p.isDefense ? "Difesa!" : "Liberato"}
+                             </div>
+                             <span className="text-[10px] font-mono opacity-40 text-white uppercase italic">
+                               {p.timeRemaining}
+                             </span>
+                          </div>
+                          <div className="text-[10px] font-mono opacity-30 text-white uppercase tracking-widest">
+                             Settore: {p.sector} | Minaccia: {translateOwner(p.owner)}
+                          </div>
+                       </div>
+                       
+                       <div className="text-right">
+                          <div className="text-xs font-black text-white/90">
+                            {p.players.toLocaleString()} Helldivers
+                          </div>
+                          <div className="text-[10px] font-mono opacity-40 text-white uppercase">
+                            Presenza Attiva
+                          </div>
+                       </div>
+                    </div>
+                  </div>
+               </motion.div>
+             ))
+           ) : (
+             <div className="py-24 text-center border border-dashed border-white/10 opacity-30">
+                <p className="font-mono text-xs uppercase tracking-[0.3em]">Nessuna operazione rilevata nei settori critici.</p>
              </div>
-           ))
-         ) : (
-           <div className="col-span-full py-20 text-center border border-dashed border-white/10 opacity-40">
-              <p className="font-mono text-xs uppercase tracking-widest">Nessuna campagna attiva rilevata nei settori monitorati.</p>
-           </div>
-         )}
+           )}
+        </div>
       </div>
     </div>
   );

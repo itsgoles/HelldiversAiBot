@@ -18,6 +18,7 @@ import {
   ArrowRight,
   RefreshCw,
   Info,
+  Satellite,
   BookOpen,
   Sword,
   Flame,
@@ -148,54 +149,74 @@ export default function App() {
       <main className="w-full max-w-5xl mx-auto flex-grow flex flex-col items-center">
         <AnimatePresence mode="wait">
           {step === 'intro' && (
-            <motion.div
-              key="intro"
-              initial={{ opacity: 0, y: 20 }}
-              animate={{ opacity: 1, y: 0 }}
-              exit={{ opacity: 0, y: -20 }}
-              className="terminal-border p-8 bg-superearth-grey/50 backdrop-blur-sm w-full"
-            >
-              <h2 className="text-2xl font-bold mb-4 text-superearth-yellow uppercase italic tracking-wider">Cittadino, la tua missione inizia qui.</h2>
-              <div className="grid md:grid-cols-2 gap-12 items-center">
-                <div>
-                  <p className="text-lg mb-6 leading-relaxed">
-                    Benvenuto nell'hub di analisi tattica. Il Ministero della Verità ha approvato questo sistema per l'ottimizzazione degli Helldivers.
-                  </p>
-                  <p className="text-sm border-l border-superearth-yellow/30 pl-4 py-2 italic opacity-60 mb-8">
-                    "Un Helldiver analizzato è un Helldiver che torna a casa con i campioni."
-                  </p>
-                  
-                  <div className="space-y-4">
-                    <button
-                      onClick={() => {
-                        setQuizType('extended');
-                        setStep('quiz');
-                        setCurrentQuestionIndex(0);
-                      }}
-                      className="w-full bg-superearth-yellow text-black font-black py-4 px-8 hover:bg-yellow-400 transition-all flex flex-col items-center justify-center gap-1 text-xl italic uppercase"
-                    >
-                      Nuova Recluta / Primo Test
-                      <span className="text-[10px] opacity-60 normal-case italic">Valutazione Biometrica Completa (45 quesiti)</span>
-                    </button>
+            <div className="flex flex-col gap-12 w-full">
+              <motion.div
+                key="intro"
+                initial={{ opacity: 0, y: 20 }}
+                animate={{ opacity: 1, y: 0 }}
+                exit={{ opacity: 0, y: -20 }}
+                className="terminal-border p-8 bg-superearth-grey/50 backdrop-blur-sm w-full"
+              >
+                <h2 className="text-3xl font-black mb-6 text-superearth-yellow uppercase italic tracking-[0.2em]">Cittadino, la tua missione inizia qui.</h2>
+                <div className="grid lg:grid-cols-2 gap-12 items-start">
+                  <div>
+                    <h3 className="text-superearth-yellow font-black uppercase text-sm mb-4 flex items-center gap-2">
+                       <ShieldCheck className="w-5 h-5" /> VALUTAZIONE RECLUTAMENTO
+                    </h3>
+                    <p className="text-lg mb-6 leading-relaxed">
+                      L'Alto Comando richiede una valutazione della tua attitudine al combattimento. Scegli il tuo percorso formativo.
+                    </p>
+                    
+                    <div className="space-y-4">
+                      <button
+                        onClick={() => {
+                          setQuizType('extended');
+                          setStep('quiz');
+                          setCurrentQuestionIndex(0);
+                        }}
+                        className="w-full bg-superearth-yellow text-black font-black py-5 px-8 hover:bg-yellow-400 transition-all flex flex-col items-center justify-center gap-1 text-xl italic uppercase group"
+                      >
+                        <span className="flex items-center gap-2">
+                          Nuova Recluta / Primo Test
+                          <ArrowRight className="w-5 h-5 group-hover:translate-x-2 transition-transform" />
+                        </span>
+                        <span className="text-[10px] opacity-60 font-mono normal-case italic">Valutazione Biometrica Completa (45 quesiti)</span>
+                      </button>
 
-                    <button
-                      onClick={() => {
-                        setQuizType('short');
-                        setStep('quiz');
-                        setCurrentQuestionIndex(0);
-                      }}
-                      className="w-full border-2 border-superearth-yellow text-superearth-yellow font-black py-4 px-8 hover:bg-superearth-yellow/10 transition-all flex flex-col items-center justify-center gap-1 text-xl italic uppercase"
-                    >
-                      Veterano / Ricalibrazione
-                      <span className="text-[10px] opacity-60 normal-case italic">Aggiornamento Tattico Rapido (8 quesiti)</span>
-                    </button>
+                      <button
+                        onClick={() => {
+                          setQuizType('short');
+                          setStep('quiz');
+                          setCurrentQuestionIndex(0);
+                        }}
+                        className="w-full border-2 border-superearth-yellow text-superearth-yellow font-black py-5 px-8 hover:bg-superearth-yellow/10 transition-all flex flex-col items-center justify-center gap-1 text-xl italic uppercase group"
+                      >
+                        <span className="flex items-center gap-2">
+                          Veterano / Ricalibrazione
+                          <ArrowRight className="w-5 h-5 group-hover:translate-x-2 transition-transform" />
+                        </span>
+                        <span className="text-[10px] opacity-60 font-mono normal-case italic">Aggiornamento Tattico Rapido (8 quesiti)</span>
+                      </button>
+                    </div>
+
+                    <div className="mt-8 p-4 bg-black/40 border-l border-superearth-yellow/30 font-mono text-[10px] uppercase space-y-1 opacity-50">
+                       <p>&gt; PROTOCOLLO: HEL_ASSESS_v4.2</p>
+                       <p>&gt; STATO: IN ATTESA DI INPUT UMANO</p>
+                       <p>&gt; NOTA: IL FALLIMENTO dell'ADDESTRAMENTO è TRADIMENTO</p>
+                    </div>
+                  </div>
+
+                  <div className="space-y-6">
+                    <h3 className="text-superearth-yellow font-black uppercase text-sm mb-4 flex items-center gap-2 tracking-widest">
+                       <Satellite className="w-5 h-5" /> BOLLETTINO GALATTICO
+                    </h3>
+                    <div className="max-h-[600px] overflow-y-auto pr-2 custom-scrollbar">
+                      <WarStatusView warData={warData} isLoading={isLoadingWar} />
+                    </div>
                   </div>
                 </div>
-                <div className="hidden md:block opacity-30">
-                   <ShieldCheck className="w-full h-auto text-superearth-yellow animate-pulse" />
-                </div>
-              </div>
-            </motion.div>
+              </motion.div>
+            </div>
           )}
 
           {step === 'quiz' && quizType && (
