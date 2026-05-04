@@ -18,15 +18,14 @@ export interface WarStatus {
   }[];
 }
 
-const API_BASE = "https://api.helldivers2.dev/v1";
-
+// Proxy endpoint defined in server.ts
 export async function fetchWarStatus(): Promise<WarStatus | null> {
   try {
     const response = await fetch("/api/war-data");
     
     if (!response.ok) throw new Error("Errore nel recupero della Guerra Galattica");
     
-    const { war, assignments, campaigns } = await response.json();
+    const { assignments, campaigns } = await response.json();
     
     const majorOrder = assignments?.[0] ? {
       title: assignments[0].title || "ORDINE MAGGIORE",
@@ -35,15 +34,24 @@ export async function fetchWarStatus(): Promise<WarStatus | null> {
       expiresAt: assignments[0].expiresAt || new Date().toISOString()
     } : undefined;
 
-    const activePlanets = (campaigns || []).slice(0, 10).map((c: any) => ({
-      name: c.planet?.name || "Pianeta Ignoto",
-      sector: c.planet?.sector || "Settore Sconosciuto",
-      liberation: 100 - (c.planet?.health / c.planet?.maxHealth * 100 || 0),
-      owner: c.planet?.owner || "Humans",
-      health: c.planet?.health || 0,
-      maxHealth: c.planet?.maxHealth || 1000,
-      players: c.planet?.statistics?.playerCount || 0
-    }));
+    const activePlanets = (campaigns || []).slice(0, 10).map((c: any) => {
+      const health = c.planet?.health || 0;
+      const maxHealth = c.planet?.maxHealth || 1000;
+      // liberation is usually: health / maxHealth * 100 if health represents progress
+      // or 100 - (health / maxHealth * 100) if health represents enemy presence.
+      // Based on helldivers2.dev, health often starts at max and goes to 0 for liberation.
+      const liberation = 100 - ((health / maxHealth) * 100);
+
+      return {
+        name: c.planet?.name || "Pianeta Ignoto",
+        sector: c.planet?.sector || "Settore Sconosciuto",
+        liberation: Math.max(0, Math.min(100, liberation)),
+        owner: c.planet?.owner || "Humans",
+        health: health,
+        maxHealth: maxHealth,
+        players: c.planet?.statistics?.playerCount || 0
+      };
+    });
 
     return {
       time: new Date().toISOString(),

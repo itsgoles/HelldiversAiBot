@@ -35,6 +35,10 @@ import {
 import { SHORT_QUESTIONS, EXTENDED_QUESTIONS, ARCHETYPES, STRATEGIES, Build } from './constants';
 import { analyzePlayer, ProfileInput, PlayerStats, AnalysisResult } from './lib/analyst';
 import { fetchWarStatus, WarStatus } from './services/warService';
+import { WarStatusView } from './components/WarStatusView';
+import { BuildSection } from './components/BuildSection';
+import { QuizEngine } from './components/QuizEngine';
+import { TacticalChat } from './components/TacticalChat';
 import { clsx, type ClassValue } from 'clsx';
 import { twMerge } from 'tailwind-merge';
 
@@ -61,6 +65,12 @@ export default function App() {
   const activeQuestions = quizType === 'extended' ? EXTENDED_QUESTIONS : SHORT_QUESTIONS;
 
   useEffect(() => {
+    // Notify Telegram that the WebApp is ready
+    if (typeof window !== 'undefined' && (window as any).Telegram?.WebApp) {
+      (window as any).Telegram.WebApp.ready();
+      (window as any).Telegram.WebApp.expand();
+    }
+
     setIsLoadingWar(true);
     fetchWarStatus().then(data => {
       setWarData(data);
@@ -188,86 +198,16 @@ export default function App() {
             </motion.div>
           )}
 
-          {step === 'quiz' && (
-            <motion.div
-              key="quiz"
-              initial={{ opacity: 0, x: 20 }}
-              animate={{ opacity: 1, x: 0 }}
-              exit={{ opacity: 0, x: -20 }}
-              className="terminal-border p-6 md:p-10 bg-superearth-grey/50 w-full"
-            >
-              <div className="flex justify-between items-center mb-8">
-                <div className="flex flex-col">
-                  <div className="flex items-center gap-4 mb-1">
-                    <button 
-                      onClick={handleGoBack}
-                      className="text-superearth-yellow hover:text-white transition-colors flex items-center gap-1 text-[10px] font-mono group"
-                    >
-                      <ArrowRight className="w-3 h-3 rotate-180 group-hover:-translate-x-1 transition-transform" /> [INDIETRO]
-                    </button>
-                    <span className="font-mono text-superearth-yellow text-[10px] uppercase opacity-40 tracking-widest">{quizType === 'extended' ? 'Valutazione Biometrica' : 'Ricalibrazione Tattica'}</span>
-                  </div>
-                  <span className="font-mono text-superearth-yellow font-bold">QUESTITO {currentQuestionIndex + 1}/{activeQuestions.length}</span>
-                </div>
-                <div className="h-2 w-48 bg-superearth-grey border border-superearth-yellow/30">
-                  <div 
-                    className="h-full bg-superearth-yellow transition-all duration-300 shadow-[0_0_10px_rgba(255,225,0,0.4)]" 
-                    style={{ width: `${((currentQuestionIndex + 1) / activeQuestions.length) * 100}%` }}
-                  />
-                </div>
-              </div>
-
-              <h3 className="text-2xl md:text-3xl font-bold mb-8 text-white italic">
-                {activeQuestions[currentQuestionIndex].text}
-              </h3>
-
-              <div className={cn(
-                "grid gap-4",
-                activeQuestions[currentQuestionIndex].type === 'likert' ? "grid-cols-1 sm:grid-cols-5" : "grid-cols-1"
-              )}>
-                {activeQuestions[currentQuestionIndex].options.map((opt) => (
-                  <button
-                    key={opt.value}
-                    disabled={lastSelectedAnswer !== null}
-                    onClick={() => handleQuizAnswer(opt.value)}
-                    className={cn(
-                      "text-left p-6 border transition-all group flex items-center justify-between relative overflow-hidden",
-                      activeQuestions[currentQuestionIndex].type === 'likert' && "flex-col text-center justify-center p-4",
-                      lastSelectedAnswer === opt.value
-                        ? "bg-superearth-yellow text-black border-white"
-                        : quizAnswers[activeQuestions[currentQuestionIndex].id] === opt.value
-                          ? "bg-superearth-yellow/20 border-superearth-yellow text-superearth-yellow"
-                          : "border-superearth-yellow/20 bg-superearth-dark hover:bg-superearth-yellow hover:text-black"
-                    )}
-                  >
-                    <span className={cn(
-                      "font-bold uppercase italic relative z-10",
-                      activeQuestions[currentQuestionIndex].type === 'likert' ? "text-xs" : "text-lg"
-                    )}>{opt.label}</span>
-                    <div className={cn("relative z-10", activeQuestions[currentQuestionIndex].type === 'likert' ? "mt-4" : "flex items-center gap-3")}>
-                      {lastSelectedAnswer === opt.value ? (
-                        <motion.div initial={{ scale: 0 }} animate={{ scale: 1 }}>
-                          <Check className="w-6 h-6" />
-                        </motion.div>
-                      ) : (
-                        <ArrowRight className={cn(
-                          "transition-all",
-                          activeQuestions[currentQuestionIndex].type === 'likert' ? "opacity-20 group-hover:opacity-100 group-hover:translate-y-1 rotate-90" : "opacity-0 group-hover:opacity-100 group-hover:translate-x-1"
-                        )} />
-                      )}
-                    </div>
-                    {lastSelectedAnswer === opt.value && (
-                      <motion.div 
-                        initial={{ left: '-100%' }}
-                        animate={{ left: '100%' }}
-                        transition={{ duration: 0.4 }}
-                        className="absolute inset-0 bg-white/20 skew-x-12"
-                      />
-                    )}
-                  </button>
-                ))}
-              </div>
-            </motion.div>
+          {step === 'quiz' && quizType && (
+            <QuizEngine 
+              quizType={quizType}
+              currentQuestionIndex={currentQuestionIndex}
+              activeQuestions={activeQuestions}
+              quizAnswers={quizAnswers}
+              lastSelectedAnswer={lastSelectedAnswer}
+              onAnswer={handleQuizAnswer}
+              onBack={handleGoBack}
+            />
           )}
 
           {step === 'stats_prompt' && (
@@ -593,46 +533,9 @@ export default function App() {
                     initial={{ opacity: 0, scale: 0.98 }}
                     animate={{ opacity: 1, scale: 1 }}
                     exit={{ opacity: 0, scale: 0.98 }}
-                    className="grid grid-cols-1 md:grid-cols-2 gap-8"
+                    className="w-full"
                   >
-                    {analysis.recommendedBuilds.map((build, i) => (
-                      <div key={i} className="terminal-border overflow-hidden bg-superearth-grey/50 hover:border-superearth-yellow transition-all flex flex-col">
-                        <div className="bg-superearth-yellow p-4 text-black flex justify-between items-center">
-                          <h4 className="font-black text-xl italic uppercase truncate">{build.name}</h4>
-                          <Zap className="w-5 h-5 shrink-0" />
-                        </div>
-                        <div className="p-6 flex-grow space-y-6">
-                          <div className="grid grid-cols-2 gap-4">
-                            <div>
-                               <p className="text-superearth-yellow text-[10px] font-mono tracking-tighter uppercase mb-1">Arma Primaria</p>
-                               <p className="font-bold text-sm">{build.primary}</p>
-                            </div>
-                            <div>
-                               <p className="text-superearth-yellow text-[10px] font-mono tracking-tighter uppercase mb-1">Secondaria</p>
-                               <p className="font-bold text-sm">{build.secondary}</p>
-                            </div>
-                          </div>
-                          <div>
-                             <p className="text-superearth-yellow text-[10px] font-mono tracking-tighter uppercase mb-1">Armatura Consigliata</p>
-                             <p className="font-bold text-sm italic">{build.armorType}</p>
-                             <p className="text-[11px] opacity-60 mt-1">{build.armorReason}</p>
-                          </div>
-                          <div>
-                             <p className="text-superearth-yellow text-[10px] font-mono tracking-tighter uppercase mb-1">Stratagemmi Fondamentali</p>
-                             <div className="flex flex-wrap gap-1.5 mt-2">
-                                {build.stratagems.map((s, j) => (
-                                  <span key={j} className="bg-black/40 border border-superearth-yellow/20 px-2 py-1 text-[10px] font-bold uppercase">{s}</span>
-                                ))}
-                             </div>
-                          </div>
-                        </div>
-                        <div className="p-4 bg-black/30 border-t border-superearth-yellow/10">
-                           <p className="text-xs font-medium leading-relaxed italic opacity-80">
-                             <strong>TACTICAL NOTE:</strong> {build.gamePlan}
-                           </p>
-                        </div>
-                      </div>
-                    ))}
+                    <BuildSection builds={analysis.recommendedBuilds} />
                   </motion.div>
                 )}
 
@@ -642,84 +545,9 @@ export default function App() {
                     initial={{ opacity: 0 }}
                     animate={{ opacity: 1 }}
                     exit={{ opacity: 0 }}
-                    className="space-y-8"
+                    className="w-full"
                   >
-                    {warData ? (
-                      <div className="space-y-6">
-                        {warData.majorOrder && (
-                          <div className="terminal-border bg-superearth-yellow p-6 text-black">
-                            <div className="flex items-center gap-3 mb-4">
-                              <Info className="w-8 h-8" />
-                              <h4 className="font-black text-2xl uppercase italic">ORDINE MAGGIORE ATTIVO</h4>
-                            </div>
-                            <h5 className="font-black text-xl mb-1">{warData.majorOrder.title}</h5>
-                            <p className="font-bold mb-6 opacity-80">{warData.majorOrder.description}</p>
-                            <div className="space-y-1">
-                               <div className="flex justify-between font-mono text-xs font-bold uppercase">
-                                 <span>Progresso Campagna</span>
-                                 <span>{warData.majorOrder.progress.toFixed(1)}%</span>
-                               </div>
-                               <div className="h-4 bg-black/20 w-full">
-                                  <div className="h-full bg-black shadow-[0_0_10px_rgba(0,0,0,0.5)]" style={{ width: `${warData.majorOrder.progress}%` }} />
-                               </div>
-                            </div>
-                          </div>
-                        )}
-
-                        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-6">
-                           {warData.activePlanets.map((p, i) => (
-                             <div key={i} className="terminal-border p-4 bg-superearth-grey/40 group hover:bg-superearth-grey/60 transition-colors">
-                                <div className="flex justify-between items-start mb-4">
-                                   <div>
-                                     <h5 className="font-black text-lg text-superearth-yellow">{p.name}</h5>
-                                     <p className="text-[10px] font-mono opacity-50 uppercase">{p.sector}</p>
-                                   </div>
-                                   <div className={cn(
-                                     "px-2 py-0.5 text-[9px] font-black uppercase rounded-sm",
-                                     p.owner === 'Terminidi' ? "bg-orange-500" : p.owner === 'Automaton' ? "bg-red-600" : "bg-superearth-yellow text-black"
-                                   )}>
-                                     {p.owner}
-                                   </div>
-                                </div>
-                                <div className="space-y-1 mt-4">
-                                   <div className="flex justify-between text-[10px] font-mono uppercase">
-                                      <span>Liberazione</span>
-                                      <span>{p.liberation.toFixed(1)}%</span>
-                                   </div>
-                                   <div className="h-1.5 bg-black/40 w-full overflow-hidden">
-                                      <div className="h-full bg-superearth-yellow" style={{ width: `${p.liberation}%` }} />
-                                   </div>
-                                </div>
-                                <div className="mt-4 flex items-center justify-between text-[10px] font-mono opacity-40">
-                                   <span className="flex items-center gap-1 font-bold"><Crosshair className="w-3 h-3" /> {p.players.toLocaleString()} HELIVERS</span>
-                                </div>
-                             </div>
-                           ))}
-                        </div>
-                      </div>
-                    ) : (
-                      <div className="p-20 text-center border-2 border-dashed border-superearth-yellow/10 bg-superearth-grey/10 flex flex-col items-center justify-center gap-6">
-                         <div className="font-mono text-superearth-yellow/40 text-[10px] w-full max-w-md bg-black/40 p-4 border border-superearth-yellow/5 h-40 overflow-hidden relative">
-                            <motion.div
-                              animate={{ y: [0, -200] }}
-                              transition={{ duration: 5, repeat: Infinity, ease: "linear" }}
-                              className="space-y-1"
-                            >
-                              {Array.from({ length: 20 }).map((_, i) => (
-                                <p key={i} className="truncate" id={`log-item-${i}`}>
-                                  {`[LOG_${i}] FETCHING_SECTOR_${Math.floor(Math.random()*100)}... OK`}
-                                  {` > DATA: ${Math.random().toString(36).substring(7).toUpperCase()}`}
-                                </p>
-                              ))}
-                            </motion.div>
-                            <div className="absolute inset-0 bg-gradient-to-b from-transparent via-transparent to-superearth-dark" />
-                         </div>
-                         <div className="space-y-2">
-                           <p className="font-black text-superearth-yellow uppercase tracking-[0.3em] text-sm animate-pulse">Sincronizzazione Uplink Satellitare...</p>
-                           <p className="text-[10px] font-mono opacity-40 italic">Autorizzazione Ministero della Verità richiesta...</p>
-                         </div>
-                      </div>
-                    )}
+                    <WarStatusView warData={warData} isLoading={isLoadingWar} />
                   </motion.div>
                 )}
 
@@ -824,6 +652,14 @@ export default function App() {
           )}
         </AnimatePresence>
       </main>
+
+      {analysis && (
+        <TacticalChat context={{ 
+          archetype: analysis.archetype, 
+          strengths: analysis.strengths,
+          warData: warData 
+        }} />
+      )}
 
       <footer className="mt-20 py-8 border-t border-superearth-yellow/10 w-full max-w-5xl mx-auto">
         <div className="flex flex-col md:flex-row justify-between items-center gap-4 opacity-40 font-mono text-[10px] uppercase tracking-[0.2em]">

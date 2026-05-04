@@ -2,40 +2,61 @@ import express from "express";
 import { createServer as createViteServer } from "vite";
 import path from "path";
 import { fileURLToPath } from "url";
+import cors from "cors";
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
+
+// Cache for War Data
+let warCache: { data: any; ts: number } | null = null;
+const CACHE_TTL = 60_000; // 60 seconds
 
 async function startServer() {
   const app = express();
   const PORT = 3000;
 
   // Middleware
+  app.use(cors());
   app.use(express.json());
 
-  // API Proxy Route for Helldivers 2
-  // We use this to avoid CORS issues and have more control over the fetch
+  // API Proxy Route for Helldivers 2 with Cache
   app.get("/api/war-data", async (req, res) => {
+    const now = Date.now();
+    if (warCache && now - warCache.ts < CACHE_TTL) {
+      return res.json(warCache.data);
+    }
+
     try {
-      // Trying different endpoints for better reliability
       const API_BASE = "https://api.helldivers2.dev/api/v1";
       
+      const fetchOptions = { 
+        headers: { 
+          'User-Agent': 'Helldivers2TacticalAnalyst/1.0',
+          'Accept': 'application/json'
+        } 
+      };
+
       const [warRes, assignmentsRes, campaignsRes] = await Promise.all([
-        fetch(`${API_BASE}/war`, { headers: { 'User-Agent': 'Helldivers2TacticalAnalyst/1.0' } }),
-        fetch(`${API_BASE}/assignments`, { headers: { 'User-Agent': 'Helldivers2TacticalAnalyst/1.0' } }),
-        fetch(`${API_BASE}/campaigns`, { headers: { 'User-Agent': 'Helldivers2TacticalAnalyst/1.0' } })
+        fetch(`${API_BASE}/war`, fetchOptions),
+        fetch(`${API_BASE}/assignments`, fetchOptions),
+        fetch(`${API_BASE}/campaigns`, fetchOptions)
       ]);
 
       const warData = warRes.ok ? await warRes.json() : {};
       const assignmentsData = assignmentsRes.ok ? await assignmentsRes.json() : [];
       const campaignsData = campaignsRes.ok ? await campaignsRes.json() : [];
 
-      res.json({
+      const result = {
         war: warData,
         assignments: assignmentsData,
         campaigns: campaignsData,
         timestamp: new Date().toISOString()
-      });
+      };
+
+      // Update cache
+      warCache = { data: result, ts: now };
+
+      res.json(result);
     } catch (error) {
       console.error("Proxy Error:", error);
       res.status(500).json({ error: "Failed to fetch war data" });
